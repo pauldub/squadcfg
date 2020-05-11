@@ -1,6 +1,9 @@
 use itertools::Itertools;
+use pest::{self, Parser};
 
+#[derive(Debug)]
 pub enum GroupPermission {
+    Unknown,
     StartVote,
     ChangeMap,
     Pause,
@@ -24,8 +27,35 @@ pub enum GroupPermission {
 }
 
 impl GroupPermission {
+    fn from_string(value: &str) -> Self {
+        match value {
+            "startbote" => Self::StartVote,
+            "changemap" => Self::ChangeMap,
+            "pause" => Self::Pause,
+            "cheat" => Self::Cheat,
+            "private" => Self::Private,
+            "balance" => Self::Balance,
+            "chat" => Self::Chat,
+            "kick" => Self::Kick,
+            "ban" => Self::Ban,
+            "config" => Self::Config,
+            "cameraman" => Self::Cameraman,
+            "immunity" => Self::Immunity,
+            "manageserver" => Self::ManageServer,
+            "featuretest" => Self::FeatureTest,
+            "reserve" => Self::Reserve,
+            "demos" => Self::Demos,
+            "debug" => Self::Debug,
+            "teamchange" => Self::TeamChange,
+            "forceteamchange" => Self::ForceTeamChange,
+            "canseedadminchat" => Self::CanSeedAdminChat,
+            _ => Self::Unknown,
+        }
+    }
+
     fn to_whitelist(&self) -> String {
         let value = match self {
+            Self::Unknown => "",
             Self::StartVote => "startbote",
             Self::ChangeMap => "changemap",
             Self::Pause => "pause",
@@ -52,6 +82,7 @@ impl GroupPermission {
     }
 }
 
+#[derive(Debug)]
 pub struct Group {
     name: String,
     permissions: Vec<GroupPermission>,
@@ -77,67 +108,63 @@ impl Group {
     }
 }
 
-pub struct Permission<'a> {
+#[derive(Debug)]
+pub struct Player {
     steam_id: u64,
-    group: &'a Group,
+    group: String,
     comment: String,
 }
 
-impl<'a> Permission<'a> {
-    fn new(steam_id: u64, group: &'a Group, comment: &str) -> Self {
+impl Player {
+    fn new(steam_id: u64, group: &str, comment: &str) -> Self {
         Self {
             steam_id,
-            group,
+            group: group.to_owned(),
             comment: comment.to_owned(),
         }
     }
 
     fn to_whitelist(&self) -> String {
-        format!(
-            "Admin={}:{} // {}",
-            self.steam_id, self.group.name, self.comment
-        )
+        format!("Admin={}:{} // {}", self.steam_id, self.group, self.comment)
     }
 }
 
-pub struct Whitelist<'a> {
-    groups: Vec<&'a Group>,
-    permissions: Vec<Permission<'a>>,
+#[derive(Debug)]
+pub struct Whitelist {
+    groups: Vec<Group>,
+    players: Vec<Player>,
 }
 
-impl<'a> Whitelist<'a> {
-    fn new(groups: Vec<&'a Group>, permissions: Vec<Permission<'a>>) -> Self {
-        Self {
-            groups,
-            permissions,
-        }
+impl Whitelist {
+    fn new(groups: Vec<Group>, players: Vec<Player>) -> Self {
+        Self { groups, players }
     }
 
     fn to_string(&self) -> String {
         let groups = self
             .groups
             .iter()
-            .map(|g| Group::to_whitelist(*g))
+            .map(Group::to_whitelist)
             .collect::<Vec<String>>()
             .join("\n");
 
-        let permissions = self
-            .permissions
+        let players = self
+            .players
             .iter()
-            .group_by(|p| p.group.name.as_str())
+            .group_by(|p| p.group.as_str())
             .into_iter()
-            .map(|(group_name, permissions)| {
-                let group_permissions = permissions
+            .map(|(group_name, players)| {
+                let group_players = players
                     .into_iter()
-                    .map(Permission::to_whitelist)
+                    .map(Player::to_whitelist)
                     .collect::<Vec<String>>()
                     .join("\n");
-                format!("// {}\n{}", group_name, group_permissions)
+                format!("// {}\n{}", group_name, group_players)
             })
             .collect::<Vec<String>>()
             .join("\n\n");
 
-        format!("{}\n\n{}", groups, permissions)
+        format!("{}\n\n{}", groups, players)
     }
 }
 
@@ -145,9 +172,75 @@ impl<'a> Whitelist<'a> {
 #[grammar = "whitelist.pest"]
 struct WhitelistParser {}
 
+fn parse_group(pair: pest::iterators::Pair<Rule>) -> Group {
+    let mut name: &str = "";
+    let mut permissions: Vec<GroupPermission> = vec![];
+
+    for group_pair in pair.into_inner() {
+        match group_pair.as_rule() {
+            Rule::group_name => {
+                name = group_pair.as_str();
+            }
+            Rule::permissions => {
+                for permission_pair in group_pair.into_inner() {
+                    let permission = GroupPermission::from_string(permission_pair.as_str());
+
+                    permissions.push(permission);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Group::new(name, permissions)
+}
+
+fn parse_player(pair: pest::iterators::Pair<Rule>) -> Player {
+    let mut steam_id: u64 = 0;
+    let mut group_name: &str = "";
+    let mut comment: &str = "";
+
+    for player_pair in pair.into_inner() {
+        match player_pair.as_rule() {
+            Rule::player_name => {
+                steam_id = player_pair.as_str().parse::<u64>().unwrap_or(0);
+            }
+            Rule::group_name => {
+                group_name = player_pair.as_str();
+            }
+            Rule::comment => {
+                for comment_pair in player_pair.into_inner() {
+                    comment = comment_pair.as_str();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Player::new(steam_id, group_name, comment)
+}
+
+pub fn parse_whitelist(text: &str) -> Result<Whitelist, pest::error::Error<Rule>> {
+    let pairs = WhitelistParser::parse(Rule::root, text)?;
+    let mut groups: Vec<Group> = vec![];
+    let mut players: Vec<Player> = vec![];
+
+    for pair in pairs {
+        for rule_pair in pair.into_inner().flatten() {
+            match rule_pair.as_rule() {
+                Rule::group => groups.push(parse_group(rule_pair)),
+                Rule::player => players.push(parse_player(rule_pair)),
+                _ => {}
+            }
+        }
+    }
+
+    Ok(Whitelist::new(groups, players))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Group, GroupPermission, Permission, Rule, Whitelist, WhitelistParser};
+    use super::{Group, GroupPermission, Player, Whitelist};
 
     #[test]
     fn it_encodes_a_group_permission() {
@@ -173,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn it_encodes_a_permission() {
+    fn it_encodes_a_player() {
         let group = Group::new(
             "Moderator",
             vec![
@@ -184,10 +277,10 @@ mod tests {
             ],
         );
 
-        let permission = Permission::new(76561115695178, &group, "Player 1");
+        let player = Player::new(76561115695178, &group.name, "Player 1");
 
         assert_eq!(
-            permission.to_whitelist(),
+            player.to_whitelist(),
             "Admin=76561115695178:Moderator // Player 1"
         );
     }
@@ -237,16 +330,16 @@ mod tests {
         let whitelist = Group::new("Whitelist", vec![GroupPermission::Reserve]);
 
         let whitelist = Whitelist::new(
-            vec![&super_admin, &admin, &moderator, &whitelist],
+            vec![super_admin, admin, moderator, whitelist],
             vec![
-                Permission::new(76561115695178, &moderator, "Player 5"),
-                Permission::new(8915618948911, &moderator, "Player 4"),
-                Permission::new(7894591951519, &admin, "Player 3"),
-                Permission::new(7895365435431, &admin, "Player 8792"),
-                Permission::new(7984591565611, &super_admin, "Player 2"),
-                Permission::new(7917236241624, &super_admin, "Player 1"),
-                Permission::new(7984591565611, &whitelist, "Player 123"),
-                Permission::new(7984591565523, &whitelist, "Player 156"),
+                Player::new(76561115695178, "Moderator", "Player 5"),
+                Player::new(8915618948911, "Moderator", "Player 4"),
+                Player::new(7894591951519, "Admin", "Player 3"),
+                Player::new(7895365435431, "Admin", "Player 8792"),
+                Player::new(7984591565611, "SuperAdmin", "Player 2"),
+                Player::new(7917236241624, "SuperAdmin", "Player 1"),
+                Player::new(7984591565611, "Whitelist", "Player 123"),
+                Player::new(7984591565523, "Whitelist", "Player 156"),
             ],
         );
 
@@ -272,8 +365,6 @@ Admin=7984591565611:Whitelist // Player 123
 Admin=7984591565523:Whitelist // Player 156");
     }
 
-    use pest::Parser;
-
     #[test]
     fn it_parses_a_whitelist() {
         let whitelist_text = "Group=SuperAdmin:changemap,cheat,private,balance,chat,kick,ban,config,cameraman,debug,pause
@@ -296,8 +387,9 @@ Admin=7917236241624:SuperAdmin // Player 1
 // Whitelist
 Admin=7984591565611:Whitelist // Player 123
 Admin=7984591565523:Whitelist // Player 156";
-        let pairs = WhitelistParser::parse(Rule::root, whitelist_text).unwrap();
-        println!("{:?}", pairs);
-        assert!(false);
+
+        let whitelist = super::parse_whitelist(whitelist_text).unwrap();
+
+        assert_eq!(whitelist.to_string(), whitelist_text);
     }
 }

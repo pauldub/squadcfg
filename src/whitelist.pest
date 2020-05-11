@@ -5,8 +5,9 @@ group_name = { ASCII_ALPHANUMERIC+ }
 permissions = { (perm ~ comma?)* }
 perm = { ASCII_ALPHA+ }
 comma = _{ "," }
-player = { "Admin=" ~ player_name ~ ":" ~ group_name ~ " "? ~ comment? }
+player = { "Admin=" ~ player_name ~ ":" ~ group_name ~ comment? }
 player_name = { ASCII_ALPHANUMERIC* }
 comment = { comment_start ~ comment_content }
 comment_content =  { (ASCII_ALPHANUMERIC | " ")* }
 comment_start = _{ "//" }
+WHITESPACE = _{ " " }
