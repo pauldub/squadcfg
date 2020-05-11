@@ -24,7 +24,7 @@ pub enum GroupPermission {
 }
 
 impl GroupPermission {
-    fn to_config(&self) -> String {
+    fn to_whitelist(&self) -> String {
         let value = match self {
             Self::StartVote => "startbote",
             Self::ChangeMap => "changemap",
@@ -65,11 +65,11 @@ impl Group {
         }
     }
 
-    fn to_config(&self) -> String {
+    fn to_whitelist(&self) -> String {
         let permissions = self
             .permissions
             .iter()
-            .map(GroupPermission::to_config)
+            .map(GroupPermission::to_whitelist)
             .collect::<Vec<String>>()
             .join(",");
 
@@ -92,7 +92,7 @@ impl<'a> Permission<'a> {
         }
     }
 
-    fn to_config(&self) -> String {
+    fn to_whitelist(&self) -> String {
         format!(
             "Admin={}:{} // {}",
             self.steam_id, self.group.name, self.comment
@@ -100,12 +100,12 @@ impl<'a> Permission<'a> {
     }
 }
 
-pub struct Config<'a> {
+pub struct Whitelist<'a> {
     groups: Vec<&'a Group>,
     permissions: Vec<Permission<'a>>,
 }
 
-impl<'a> Config<'a> {
+impl<'a> Whitelist<'a> {
     fn new(groups: Vec<&'a Group>, permissions: Vec<Permission<'a>>) -> Self {
         Self {
             groups,
@@ -117,7 +117,7 @@ impl<'a> Config<'a> {
         let groups = self
             .groups
             .iter()
-            .map(|g| Group::to_config(*g))
+            .map(|g| Group::to_whitelist(*g))
             .collect::<Vec<String>>()
             .join("\n");
 
@@ -129,7 +129,7 @@ impl<'a> Config<'a> {
             .map(|(group_name, permissions)| {
                 let group_permissions = permissions
                     .into_iter()
-                    .map(Permission::to_config)
+                    .map(Permission::to_whitelist)
                     .collect::<Vec<String>>()
                     .join("\n");
                 format!("// {}\n{}", group_name, group_permissions)
@@ -141,13 +141,17 @@ impl<'a> Config<'a> {
     }
 }
 
+#[derive(Parser)]
+#[grammar = "whitelist.pest"]
+struct WhitelistParser {}
+
 #[cfg(test)]
 mod tests {
-    use super::{Config, Group, GroupPermission, Permission};
+    use super::{Group, GroupPermission, Permission, Rule, Whitelist, WhitelistParser};
 
     #[test]
     fn it_encodes_a_group_permission() {
-        assert_eq!(GroupPermission::TeamChange.to_config(), "teamchange");
+        assert_eq!(GroupPermission::TeamChange.to_whitelist(), "teamchange");
     }
 
     #[test]
@@ -162,7 +166,10 @@ mod tests {
             ],
         );
 
-        assert_eq!(group.to_config(), "Group=Moderator:changemap,chat,kick,ban");
+        assert_eq!(
+            group.to_whitelist(),
+            "Group=Moderator:changemap,chat,kick,ban"
+        );
     }
 
     #[test]
@@ -180,13 +187,13 @@ mod tests {
         let permission = Permission::new(76561115695178, &group, "Player 1");
 
         assert_eq!(
-            permission.to_config(),
+            permission.to_whitelist(),
             "Admin=76561115695178:Moderator // Player 1"
         );
     }
 
     #[test]
-    fn it_formats_a_config() {
+    fn it_formats_a_whitelist() {
         let super_admin = Group::new(
             "SuperAdmin",
             vec![
@@ -229,7 +236,7 @@ mod tests {
 
         let whitelist = Group::new("Whitelist", vec![GroupPermission::Reserve]);
 
-        let config = Config::new(
+        let whitelist = Whitelist::new(
             vec![&super_admin, &admin, &moderator, &whitelist],
             vec![
                 Permission::new(76561115695178, &moderator, "Player 5"),
@@ -243,7 +250,7 @@ mod tests {
             ],
         );
 
-        assert_eq!(config.to_string(), "Group=SuperAdmin:changemap,cheat,private,balance,chat,kick,ban,config,cameraman,debug,pause
+        assert_eq!(whitelist.to_string(), "Group=SuperAdmin:changemap,cheat,private,balance,chat,kick,ban,config,cameraman,debug,pause
 Group=Admin:changemap,balance,chat,kick,ban,cameraman,pause
 Group=Moderator:changemap,chat,kick,ban
 Group=Whitelist:reserve
@@ -263,5 +270,34 @@ Admin=7917236241624:SuperAdmin // Player 1
 // Whitelist
 Admin=7984591565611:Whitelist // Player 123
 Admin=7984591565523:Whitelist // Player 156");
+    }
+
+    use pest::Parser;
+
+    #[test]
+    fn it_parses_a_whitelist() {
+        let whitelist_text = "Group=SuperAdmin:changemap,cheat,private,balance,chat,kick,ban,config,cameraman,debug,pause
+Group=Admin:changemap,balance,chat,kick,ban,cameraman,pause
+Group=Moderator:changemap,chat,kick,ban
+Group=Whitelist:reserve
+
+// Moderator
+Admin=76561115695178:Moderator // Player 5
+Admin=8915618948911:Moderator // Player 4
+
+// Admin
+Admin=7894591951519:Admin // Player 3
+Admin=7895365435431:Admin // Player 8792
+
+// SuperAdmin
+Admin=7984591565611:SuperAdmin // Player 2
+Admin=7917236241624:SuperAdmin // Player 1
+
+// Whitelist
+Admin=7984591565611:Whitelist // Player 123
+Admin=7984591565523:Whitelist // Player 156";
+        let pairs = WhitelistParser::parse(Rule::root, whitelist_text).unwrap();
+        println!("{:?}", pairs);
+        assert!(false);
     }
 }
