@@ -44,7 +44,7 @@ fn lint_action(c: &Context) {
             _ => {}
         },
         Err(err) => {
-            println!("syntax error: {:?}", err);
+            println!("syntax error: {}", err);
         }
     }
 }

@@ -1,4 +1,4 @@
-root = { SOI ~ rule* }
+root = { SOI ~ rule* ~ EOI }
 rule = { (group | player | comment) ~ NEWLINE*}
 group = { "Group=" ~ group_name ~ ":" ~ permissions }
 group_name = { ASCII_ALPHANUMERIC+ }
@@ -7,7 +7,7 @@ perm = { ASCII_ALPHA+ }
 comma = _{ "," }
 player = { "Admin=" ~ player_name ~ ":" ~ group_name ~ " "? ~ comment? }
 player_name = { ASCII_ALPHANUMERIC* }
-comment = { comment_start ~ comment_content ~ (NEWLINE | EOI) }
+comment = { comment_start ~ comment_content ~ NEWLINE? }
 comment_content =  { (LETTER | PUNCTUATION | NUMBER | SYMBOL | "/")* }
 comment_start = _{ "/" ~ "/"+ }
 
