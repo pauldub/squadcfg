@@ -84,9 +84,9 @@ impl GroupPermission {
 
 #[derive(Debug)]
 pub struct Group {
-    name: String,
-    permissions: Vec<GroupPermission>,
-    span: Span,
+    pub name: String,
+    pub permissions: Vec<GroupPermission>,
+    pub span: Span,
 }
 
 impl Group {
@@ -116,10 +116,10 @@ impl Group {
 
 #[derive(Debug)]
 pub struct Player {
-    steam_id: u64,
-    group: String,
-    comment: String,
-    span: Span,
+    pub steam_id: u64,
+    pub group: String,
+    pub comment: String,
+    pub span: Span,
 }
 
 impl Player {
@@ -143,8 +143,8 @@ impl Player {
 
 #[derive(Debug)]
 pub struct Whitelist {
-    groups: Vec<Group>,
-    players: Vec<Player>,
+    pub groups: Vec<Group>,
+    pub players: Vec<Player>,
 }
 
 impl Whitelist {
@@ -181,7 +181,7 @@ impl Whitelist {
 }
 
 #[derive(Debug, Default)]
-struct Span {
+pub struct Span {
     pub start: usize,
     pub end: usize,
 }
@@ -253,7 +253,9 @@ fn parse_player(pair: pest::iterators::Pair<Rule>) -> Player {
     player
 }
 
-pub fn parse_whitelist(text: &str) -> Result<Whitelist, pest::error::Error<Rule>> {
+pub type Error = pest::error::Error<Rule>;
+
+pub fn parse_whitelist(text: &str) -> Result<Whitelist, Error> {
     let pairs = WhitelistParser::parse(Rule::root, text)?;
     let mut groups: Vec<Group> = vec![];
     let mut players: Vec<Player> = vec![];

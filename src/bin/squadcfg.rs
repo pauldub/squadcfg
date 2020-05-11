@@ -37,10 +37,45 @@ fn lint_action(c: &Context) {
     println!("linting: {}", file_path);
 
     match admin::parse_whitelist(&contents) {
-        Ok(wl) => {
-            println!("wl: {:?}", wl);
-            println!("All is right!")
+        Ok(wl) => match lint_groups(&wl, file_path, &contents) {
+            Err(err) => {
+                println!("lint error: {}", err);
+            }
+            _ => {}
+        },
+        Err(err) => {
+            println!("syntax error: {:?}", err);
         }
-        Err(err) => println!("lint error: {:?}", err),
     }
+}
+
+use std::collections::HashMap;
+
+fn lint_groups(
+    whitelist: &admin::Whitelist,
+    file_path: &str,
+    contents: &str,
+) -> Result<(), admin::Error> {
+    let mut groups_index: HashMap<String, bool> = HashMap::new();
+
+    for group in &whitelist.groups {
+        groups_index.insert(group.name.to_lowercase(), true);
+    }
+
+    for player in &whitelist.players {
+        if groups_index.get(&player.group.to_lowercase()).is_none() {
+            return Err(admin::Error::new_from_span(
+                pest::error::ErrorVariant::CustomError {
+                    message: format!(
+                        "player `{}` has an invalid group name `{}`",
+                        player.steam_id, player.group
+                    ),
+                },
+                pest::Span::new(contents, player.span.start, player.span.end).unwrap(),
+            )
+            .with_path(file_path));
+        }
+    }
+
+    Ok(())
 }
