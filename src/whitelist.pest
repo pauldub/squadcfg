@@ -1,13 +1,14 @@
-root = { rule* }
+root = { SOI ~ rule* }
 rule = { (group | player | comment) ~ NEWLINE*}
 group = { "Group=" ~ group_name ~ ":" ~ permissions }
 group_name = { ASCII_ALPHANUMERIC+ }
 permissions = { (perm ~ comma?)* }
 perm = { ASCII_ALPHA+ }
 comma = _{ "," }
-player = { "Admin=" ~ player_name ~ ":" ~ group_name ~ comment? }
+player = { "Admin=" ~ player_name ~ ":" ~ group_name ~ " "? ~ comment? }
 player_name = { ASCII_ALPHANUMERIC* }
-comment = { comment_start ~ comment_content }
-comment_content =  { (ASCII_ALPHANUMERIC | " ")* }
-comment_start = _{ "//" }
-WHITESPACE = _{ " " }
+comment = { comment_start ~ comment_content ~ (NEWLINE | EOI) }
+comment_content =  { (LETTER | PUNCTUATION | NUMBER | SYMBOL | "/")* }
+comment_start = _{ "/" ~ "/"+ }
+
+WHITESPACE = _{ " " | "\t" }

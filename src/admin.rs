@@ -86,6 +86,7 @@ impl GroupPermission {
 pub struct Group {
     name: String,
     permissions: Vec<GroupPermission>,
+    span: Span,
 }
 
 impl Group {
@@ -93,7 +94,12 @@ impl Group {
         Self {
             name: name.to_string(),
             permissions,
+            span: Span::default(),
         }
+    }
+
+    fn set_span(&mut self, span: Span) {
+        self.span = span;
     }
 
     fn to_whitelist(&self) -> String {
@@ -113,6 +119,7 @@ pub struct Player {
     steam_id: u64,
     group: String,
     comment: String,
+    span: Span,
 }
 
 impl Player {
@@ -121,7 +128,12 @@ impl Player {
             steam_id,
             group: group.to_owned(),
             comment: comment.to_owned(),
+            span: Span::default(),
         }
+    }
+
+    fn set_span(&mut self, span: Span) {
+        self.span = span;
     }
 
     fn to_whitelist(&self) -> String {
@@ -168,6 +180,21 @@ impl Whitelist {
     }
 }
 
+#[derive(Debug, Default)]
+struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl<'a> From<pest::Span<'a>> for Span {
+    fn from(span: pest::Span<'a>) -> Self {
+        Self {
+            start: span.start(),
+            end: span.end(),
+        }
+    }
+}
+
 #[derive(Parser)]
 #[grammar = "whitelist.pest"]
 struct WhitelistParser {}
@@ -175,6 +202,7 @@ struct WhitelistParser {}
 fn parse_group(pair: pest::iterators::Pair<Rule>) -> Group {
     let mut name: &str = "";
     let mut permissions: Vec<GroupPermission> = vec![];
+    let span: Span = pair.as_span().into();
 
     for group_pair in pair.into_inner() {
         match group_pair.as_rule() {
@@ -192,13 +220,16 @@ fn parse_group(pair: pest::iterators::Pair<Rule>) -> Group {
         }
     }
 
-    Group::new(name, permissions)
+    let mut group = Group::new(name, permissions);
+    group.set_span(span);
+    group
 }
 
 fn parse_player(pair: pest::iterators::Pair<Rule>) -> Player {
     let mut steam_id: u64 = 0;
     let mut group_name: &str = "";
     let mut comment: &str = "";
+    let span: Span = pair.as_span().into();
 
     for player_pair in pair.into_inner() {
         match player_pair.as_rule() {
@@ -217,7 +248,9 @@ fn parse_player(pair: pest::iterators::Pair<Rule>) -> Player {
         }
     }
 
-    Player::new(steam_id, group_name, comment)
+    let mut player = Player::new(steam_id, group_name, comment);
+    player.set_span(span);
+    player
 }
 
 pub fn parse_whitelist(text: &str) -> Result<Whitelist, pest::error::Error<Rule>> {
